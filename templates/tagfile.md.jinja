@@ -1,0 +1,10 @@
+# Keep Note Tags
+
+{% for tag, notes in data_by_tag.items() %}
+## {{ tag }}
+
+{% for note in notes %}
+- [{{ note['title'] }}]({{ note['note_path'] }})
+{% endfor %}
+
+{% endfor %}

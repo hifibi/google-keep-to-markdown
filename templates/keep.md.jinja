@@ -1,0 +1,32 @@
+# {{note.title}}
+
+---
+
+*{{note.tags}}*
+*Created: {{note.created_at.strftime('%Y-%m-%d')}}*
+*Edited: {{note.edited_at.strftime('%Y-%m-%d')}}*
+
+---
+
+{{note.textContent}}
+
+{% if note.images is defined %}
+{% for image in note.images %}
+![{{image}}](./{{image}})
+{% endfor %}
+{% endif %}
+
+{% for item in note.listContent -%}
+- [{% if item.isChecked %}x{% else %} {% endif %}] {{ item.text }}
+{% endfor %}
+
+{% if note.assets is defined %}
+{% for asset in note.assets %}
+[{{asset}}](./{{asset}})
+{% endfor %}
+{% endif %}
+
+
+``` json
+{{ note|tojson_pretty|safe }}
+```
