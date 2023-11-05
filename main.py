@@ -1,46 +1,32 @@
-## TODO
-## [ ] get Logos notes into here
-## [ ] Bible wiki links? Checkout Markdown Scripture ext
-## [ ] set up dotenv and argparse 
-## [x] parse checklists
-## [ ] parse annotations
-## [x] parse attachments
-##      [x] move images to assets folder under converted note target
-## [x] generate a file of tags
-##      [ ] include files with no tags in an "Untagged" category
-## [ ] create a bookmark-like file out of all links
-##      [ ] maybe delete notes that are links only
-
 from pathlib import Path
 import json
 import logging
+from logging.config import fileConfig
 import shutil
 from datetime import datetime, timedelta
-from logging.config import fileConfig
-fileConfig('logging.ini')
-logger = logging.getLogger()
 from typing import List
-import judo_utils
+from slugify import slugify
 import render
 from config import keep_convert_config as kconfig
+from collections import OrderedDict
 
-all_tags = {}
+fileConfig('logging.ini')
+logger = logging.getLogger()
 
 def get_converted_root_path() -> str:
-    rtn = Path(kconfig['converted_notes_path'])
-    rtn.mkdir(parents=True,exist_ok=True)
-    logger.debug(f"Markdown target={rtn.absolute()}")
-    return rtn
+    tgt = Path(kconfig['converted_notes_folder'])
+    tgt.mkdir(parents=True,exist_ok=True)
+    logger.debug(f"Markdown target={tgt.absolute()}")
+    return tgt
 
-def get_unconverted_paths() -> list[Path]:
-    # unconverted root path
-    src = Path(kconfig['unconverted_notes_path'])
+def get_unconverted_file_paths() -> list[Path]:
+    src = Path(kconfig['unconverted_notes_folder'])
     logger.debug(f"Getting unconverted Keep notes from {src.absolute()}")
-    rtn = src.resolve().glob("**/*.json")
+    rtn = list(src.resolve().glob("**/*.json"))
     return rtn
 
 def read_json_file(filepath: Path) -> json:
-    with open(filepath) as p:
+    with open(filepath, 'r', encoding='utf-8') as p:
         rtn = json.load(p)
         logger.debug('got unconverted json')
         return rtn
@@ -69,7 +55,7 @@ def add_tags(note: dict) -> dict:
     # labels
     if 'labels' in note.keys():
         tags = [v for k,v in note.items() if k == 'labels'][0]
-        taglist = [judo_utils.slugify(i['name']) for i in tags]
+        taglist = [slugify(i['name']) for i in tags]
     # Trashed
     if note['isTrashed']: taglist += ['Trashed']
     # Pinned
@@ -78,13 +64,8 @@ def add_tags(note: dict) -> dict:
     if 'color' in note.keys() and note['color'] != 'DEFAULT': taglist += ['color-' + note['color'].lower()]
     # created-2014
     taglist += ['created-' + note['created_at'].strftime('%Y')]
-    # build string because jinja whitespace is cra
+    # build one-line string for Jinja
     note['tags'] = '\#' + ", \#".join(taglist)
-    logger.debug(f"adding tags {taglist}")
-
-    # stash tags for the tag file
-    all_tags[note['createdTimestampUsec']] = taglist
-
     return note
 
 def process_attachments(note: dict, p: Path) -> dict:
@@ -125,11 +106,10 @@ def fix_title(note:dict) -> dict:
 
 def render_note_to_markdown(note: dict) -> str:
     rendered = render.get_note_markdown(note)
-    target = judo_utils.slugify(note['title'])
-    target = Path(get_converted_root_path() / target).with_suffix('.md')
-    write_markdown_file(rendered,target)
-    stash_note_tags(note,target)
-    return target
+    note_filename = slugify(note['title'])
+    note_filename = Path(get_converted_root_path() / note_filename).with_suffix('.md')
+    write_markdown_file(rendered,note_filename)
+    return note_filename
 
 def convert_usec_to_datetime(usec: int) -> datetime:
     rtn = datetime.fromtimestamp(timedelta(microseconds = usec).total_seconds())
@@ -139,53 +119,63 @@ def write_markdown_file(contents: str, target: Path) -> None:
     with open(target, 'w+', encoding="utf-8") as outfile:
         outfile.write(contents)
 
-def stash_note_tags(note: dict, target: str):
-    ## get the tags at created timestamp into key as target
-    all_tags[target] = all_tags[note['createdTimestampUsec']]
-    ## delete created timestamp key
-    del all_tags[note['createdTimestampUsec']]
+def create_tag_toc(brief_notes: List[dict]):
+    target = Path(kconfig['tag_toc_file']).with_suffix('.md').absolute()
+    data_by_tag, uncategorized_notes = organize_notes_by_tags(brief_notes, target)
+    # reorg data into supertag -> tag -> notes
+    reorganized_data = {
+        supertag: {tag_name: tag_data for tag_name, tag_data in data_by_tag.items() if tag_data['supertag'] == supertag}
+        for supertag in set(tag_data['supertag'] for tag_data in data_by_tag.values())
+    }
+    sort_and_generate_markdown(reorganized_data, target)
 
-def render_tags_to_markdown():
-    # reorganize tags from path: [tags] to tag: [paths]
-    render_tags = {}
-    for tagpath, tags in all_tags.items():
-        for tag in tags:
-            if tag in render_tags:
-                render_tags[tag].append(Path(tagpath).absolute())
-            else:
-                render_tags[tag] = [tagpath]
-    # render reorganized tags to markdown file
-    rendered = render.get_tagfile_markdown(render_tags)
-    target = kconfig['tag_toc_path_with_filename']
-    target = Path(target).with_suffix('.md')
-    write_markdown_file(rendered,target)
-
-def render_tags_to_markdown_alt(brief_notes: List[str]):
-    # Create a dictionary to organize the data by tag
+def organize_notes_by_tags(brief_notes, target):
     data_by_tag = {}
+    uncategorized_notes = []
+
     for note in brief_notes:
+        note['note_path'] = str(Path(note['note_path']).absolute().relative_to(target.parent))
+        has_category_tag = False
+
         for tag in note['tags']:
-            tag_name = tag.replace('\\#', '')  # Remove the '\\#' prefix
+            tag_name = tag.replace('\\#', '')
+            supertag = get_supertag(tag_name)
+            has_category_tag = has_category_tag or (supertag == 'Category')
+
             if tag_name not in data_by_tag:
-                data_by_tag[tag_name] = []
-            data_by_tag[tag_name].append(note)
-    # get markdown string
-    rendered = render.get_tagfile_markdown(data_by_tag)
-    # get markdown file path
-    target = kconfig['tag_toc_path_with_filename']
-    target = Path(target).with_suffix('.md').absolute()
-    # save markdown file
-    write_markdown_file(rendered,target)
+                data_by_tag[tag_name] = {'supertag': supertag, 'notes': []}
+
+            data_by_tag[tag_name]['notes'].append(note)
+
+        if not has_category_tag:
+            uncategorized_notes.append(note)
+
+    if uncategorized_notes:
+        data_by_tag['Uncategorized'] = {'supertag': 'Category', 'notes': uncategorized_notes}
+
+    return data_by_tag, uncategorized_notes
+
+def sort_and_generate_markdown(reorganized_data, target):
+    sorted_reorganized_data = {k: dict(sorted(v.items())) for k, v in sorted(reorganized_data.items())}
+    rendered = render.get_tagfile_markdown(sorted_reorganized_data)
+    write_markdown_file(rendered, target)
+
+def get_supertag(tag_name):
+    if tag_name.startswith('created-'):
+        return 'Year'
+    elif tag_name.startswith('color-'):
+        return 'Color'
+    else:
+        return 'Category'
 
 def main():
-    unconverted_notes = get_unconverted_paths()
+
+    unconverted_notes = get_unconverted_file_paths()
     brief_notes = []
     for n in unconverted_notes:
-        logger.debug(f'processing {n.name}')
         brief_notes.append(process_note(n))
     # create a tag directory file
-    # render_tags_to_markdown()
-    render_tags_to_markdown_alt(brief_notes)
+    create_tag_toc(brief_notes)
 
 if __name__ == "__main__":
     main()

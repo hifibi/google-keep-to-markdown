@@ -1,2 +1,11 @@
-# parse-google-keep-json
-Parse JSON exported from Google keep
+# HiFiBI Google Notes to Markdown Converter
+
+- Converts .json files from Google Takeout for Keep Notes to Markdown.
+- Format Markdown notes with Jinja.
+- Converted format is standard Markdown but only tested in Visual Studio Code and on GitHub.
+- If you re-run the script, converted notes will be overwritten but not cleaned up.
+
+
+## Export Google Keep Notes
+
+Google's tool for exporting Keep Notes and any other Google data is called Google Takeout. Read [this help document](https://support.google.com/accounts/answer/3024190?hl=en) or search Google Takeout to learn how to get your data exported. The export will include the JSON files exactly as required by this tool. You just need to put them in a folder somewhere.

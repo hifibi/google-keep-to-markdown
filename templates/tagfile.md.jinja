@@ -1,10 +1,18 @@
 # Keep Note Tags
 
-{% for tag, notes in data_by_tag.items() %}
-## {{ tag }}
-
-{% for note in notes %}
-- [{{ note['title'] }}]({{ note['note_path'] }})
+{% for supertag, tag_data in data.items() -%}
+## {{ supertag }} Tags
+{% for tag, tag_info in tag_data.items() -%}
+- [{{ tag }}](#{{ tag }})
+{% endfor %}
 {% endfor %}
 
+{% for supertag, tag_data in data.items() -%}
+## {{ supertag }}
+{% for tag, tag_info in tag_data.items() -%}
+### {{ tag }} Notes
+{% for note in tag_info['notes'] -%}
+- [{{ note['title'] }}]({{ note['note_path'] }})
+{% endfor %}
+{% endfor %}
 {% endfor %}
