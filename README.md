@@ -7,7 +7,7 @@
 ## How to Use
 
 - Clone the repo.
-- Put Google Keep data from Takeout into `./notes_unconverted`. It can be at any subfolder level. All JSON files in `./notes_unconverted` will be assumed to be `Keep no`tes.
+- Put Google Keep data from Takeout into `./notes_unconverted`. It can be at any subfolder level. All JSON files in `./notes_unconverted` will be assumed to be Keep notes.
 - Run `main.py`.
 - Find a table of contents by tag at `./notes_converted/tag_index.md`.
 - If you re-run the script, converted notes will be overwritten but not cleaned up.
