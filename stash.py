@@ -48,7 +48,10 @@ def post_to_endpoint(endpoint: str, docs = None, **kwargs) -> dict:
         logger.info(f"Error: {e}")
         sdate = datetime.now().strftime('%Y-%m-%d_%H%M%S')
         string_data = str([str(d) for d in docs])
-        utils.write_text_file(string_data,Path(__file__).parent / sdate)
+        tgt = Path('/local_secrets/stash_dump')
+        if not tgt.exists():
+            tgt.mkdir(parents=True)
+        utils.write_text_file(string_data, tgt / sdate)
 
     return response
 
