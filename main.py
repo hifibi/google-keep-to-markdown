@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 import logging
 from logging.config import fileConfig
 import shutil
@@ -8,6 +9,8 @@ import render
 from appconfig import keep_convert_config as kcfg
 import apputils as utils
 import tagtoc
+import stash
+
 
 fileConfig(Path(__file__).parent / 'logging.ini')
 logger = logging.getLogger()
@@ -30,11 +33,10 @@ def process_note(p: Path) -> dict:
     note = add_tags(note)
     note = fix_title(note)
     note = process_attachments(note, p) if 'attachments' in note else note
+    note = utils.convert_values_to_string(note)
     note_path = render_note_to_markdown(note)
-    brief_note = {key: note[key] for key in ["createdTimestampUsec", "title", "tags"]}
-    # brief_note["tags"] = brief_note["tags"].split(", ")
-    brief_note["note_path"] = note_path
-    return brief_note
+    note["note_path"] = note_path
+    return note
 
 def add_dates(note:dict) -> dict:
     note['created_at'] = utils.convert_usec_to_datetime(note['createdTimestampUsec'])
@@ -100,7 +102,7 @@ def render_note_to_markdown(note: dict) -> str:
     rendered = render.get_note_markdown(note)
     note_filename = slugify(note['title'])
     note_filename = Path(get_converted_root_path() / note_filename).with_suffix('.md')
-    utils.write_markdown_file(rendered,note_filename)
+    utils.write_text_file(rendered,note_filename)
     return note_filename
 
 
@@ -113,9 +115,23 @@ def main():
     log_paths()
     unconverted_notes = get_unconverted_file_paths()
     brief_notes = []
+    converted_notes = []
+
     for n in unconverted_notes:
-        brief_notes.append(process_note(n))
-    logging.debug(f'Converted {len(brief_notes)} notes.')
+        converted_notes.append(process_note(n))
+
+    # preserve abbreviated data needed for tag toc
+    for note in converted_notes:
+        brief_notes.append({key: note[key] for key in ["createdTimestampUsec", "note_path", "title", "tags"]})
+
+    logging.debug(f'Converted {len(converted_notes)} notes.')
+
+    # remove non-json serializable path not needed in db
+    converted_notes = [{k: v for k, v in note.items() if k != "note_path"} for note in converted_notes]
+
+    # save notes to db
+    stash.stash_bulk(converted_notes)
+
     # create a tag directory file
     tagtoc.create_tag_toc(brief_notes)
 

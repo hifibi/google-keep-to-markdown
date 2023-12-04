@@ -43,8 +43,8 @@ def organize_notes_by_tags(brief_notes, target):
 def sort_and_generate_markdown(reorganized_data, target):
     sorted_reorganized_data = {k: dict(sorted(v.items())) for k, v in sorted(reorganized_data.items())}
     rendered = render.get_tagfile_markdown(sorted_reorganized_data)
-    utils.write_json_toc(sorted_reorganized_data, target.with_suffix('.json'))
-    utils.write_markdown_file(rendered, target)
+    utils.write_json_file(sorted_reorganized_data, target.with_suffix('.json'))
+    utils.write_text_file(rendered, target)
 
 
 

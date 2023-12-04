@@ -2,8 +2,8 @@
 
 ---
 
-Created: {{note.created_at.strftime('%Y-%m-%d')}}
-Edited: {{note.edited_at.strftime('%Y-%m-%d')}}
+Created: {{note.created_at}}
+Edited: {{note.edited_at}}
 Tags: {% for tag in note.tags -%} [{{ tag }}](../tag_index.md#{{tag}}-notes){% if not loop.last %}, {% endif %}{% endfor %}
 
 ---
